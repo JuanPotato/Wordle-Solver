@@ -1,11 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use rand::thread_rng;
-use rand::seq::SliceRandom;
 
 struct WordlSolver {
     word_len: usize,
     target_words: Vec<String>,
     guess_words: Vec<String>,
+    // These hashmaps can be replaced with an array to be faster
     letters: Vec<HashSet<char>>,
     known_good: HashSet<char>,
 }
@@ -64,7 +63,8 @@ impl WordlSolver {
             *v = inv_dist(*v, choices.len() as u32)
         }
 
-        self.target_words.iter().max_by_key(|w| {
+        // We use all valid guessing words since it gives us more options
+        self.guess_words.iter().max_by_key(|w| {
             let mut score = 0;
             for (i, l) in w.chars().enumerate() {
                 score += letter_freqs[i].get(&l).unwrap_or(&0);
@@ -76,7 +76,9 @@ impl WordlSolver {
                     continue;
                 }
                 h.insert(l);
-                score += word_freq.get(&l).unwrap_or(&0);
+                // I can't really reason that well, but *2 put more emphasis on having letter in
+                // common with other words. The other score we calculated above is still needed.
+                score += word_freq.get(&l).unwrap_or(&0) * 2;
             }
             score
         }).unwrap().to_string()
@@ -129,6 +131,7 @@ pub enum CharResult {
     Green,
 }
 
+// I love Python's collections.Counter class
 fn counter<T: std::cmp::Eq + std::hash::Hash>(it: impl Iterator<Item=T>) -> HashMap<T, u32> {
     let mut h = HashMap::new();
     for e in it {
@@ -137,6 +140,9 @@ fn counter<T: std::cmp::Eq + std::hash::Hash>(it: impl Iterator<Item=T>) -> Hash
     h
 }
 
+// Given an n, and a goal. Return how close the number was to the middle.
+// Higher number means closer, max is half the goal, min is 0.
+// It's just goal/2 - (distance from goal/2)
 fn inv_dist(n: u32, goal: u32) -> u32 {
     let res = (goal as i32 - (goal as i32 - 2 * n as i32).abs()) as u32 / 2;
     res
@@ -153,7 +159,7 @@ fn score(guess: &str, word: &str) -> Vec<CharResult> {
         }
     }
 
-    for (i, (gl, wl)) in guess.chars().zip(word.chars()).enumerate() {
+    for (i, (gl, _wl)) in guess.chars().zip(word.chars()).enumerate() {
         if result[i].is_some() {
             continue;
 
@@ -183,11 +189,6 @@ fn main() {
         .collect::<Vec<String>>();
 
     let mut solver = WordlSolver::new(WORD_LEN, wordle_targets.clone(), wordle_dictionary);
-
-    let mut rng = thread_rng();
-    // let word = wordle_targets.choose(&mut rng).unwrap();
-
-
     let mut solves = HashMap::new();
 
     for mystery_word in &wordle_targets {
@@ -202,21 +203,19 @@ fn main() {
             solver.update(&guess, score(&guess, mystery_word));
             if guess == *mystery_word {
                 println!("{mystery_word}, {tries}");
-                // println!("You did it in {tries} tries!");
                 break;
             }
         }
 
         *solves.entry(tries).or_insert(0) += 1;
 
-        if tries > 9 {
-            panic!("{mystery_word}");
+        if tries > 6 {
+            panic!("{mystery_word} failed");
         }
     }
 
-    for i in 1..10 {
+    for i in 1..=6 {
         let n = solves.get(&i).unwrap_or(&0);
         println!("{i}: {n}");
     }
-
 }
